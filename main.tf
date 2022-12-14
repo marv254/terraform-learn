@@ -1,65 +1,75 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
-    }
-  }
-}
-
 # Configure the AWS Provider
 provider "aws" {
   region = "us-east-1"
 }
 
+variable vpc_cidr_block {}
+variable subnet_cidr_block {}
+variable avail_zone {}
+variable env_prefix {}
+variable my_ip{}
 
-variable "cidr_blocks" {
-  description = "cidr blocks for vpc & subnets"
-   type = list(object({
-    cidr_block = string
-    name = string
-   }))
-}
-
-
-variable "environment"{
-  description = "deployment environment"
-  default = "production"
-}
- variable "avail_zone"{
-
- }
-
-resource "aws_vpc" "development-vpc"{
-    cidr_block = var.cidr_blocks[0].cidr_block
+resource "aws_vpc" "myapp-vpc"{
+    cidr_block = var.vpc_cidr_block
     tags = {
-      Name: var.cidr_blocks[0].name
+      Name: "${var.env_prefix}-vpc"
     }
 }
 
-resource "aws_subnet" "dev-subnet-1"{
-    vpc_id = aws_vpc.development-vpc.id
-    cidr_block = var.cidr_blocks[0].cidr_block 
+resource "aws_subnet" "myapp-subnet-1"{
+    vpc_id = aws_vpc.myapp-vpc.id
+    cidr_block = var.subnet_cidr_block
     availability_zone = var.avail_zone
     tags = {
-      Name: var.cidr_blocks[1].name
+      Name: "${var.env_prefix}-subnet-1"
     }
   }
 
-data "aws_vpc" "existing_vpc"{
-  default = true
-}
+  resource "aws_internet_gateway" "myapp-igw"{
+    vpc_id = aws_vpc.myapp-vpc.id
+    tags = {
+      Name = "${var.env_prefix}-igw"
+    }
+  }
 
-resource "aws_subnet" "dev-subnet-2"{
-  vpc_id = data.aws_vpc.existing_vpc.id
-  cidr_block = "172.31.96.0/20"
-  availability_zone = "us-east-1c"
-} 
+  resource "aws_default_route_table" "main-rtb"{
+      default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
 
-output "dev-vpc-id" {
-  value = aws_vpc.development-vpc.id
-}
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.myapp-igw.id
+  }
 
-output "dev-subnet-id" {
-  value = aws_subnet.dev-subnet-1.id
+  tags = {
+    Name = "${var.env_prefix}-main-rtb"
+  }
+  }
+
+  resource "aws_default_security_group" "myapp-default-sg" {
+  vpc_id      = aws_vpc.myapp-vpc.id
+
+  ingress {
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = [var.my_ip]
+  }
+
+  ingress {
+    from_port        = 8080
+    to_port          = 8080
+    protocol         = "tcp"
+    cidr_blocks      = [var.my_ip]
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.env_prefix}-sg"
+  }
 }
