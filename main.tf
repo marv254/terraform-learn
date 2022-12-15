@@ -114,6 +114,12 @@ resource "aws_key_pair" "myapp-key" {
 
 user_data = file("entry-script.sh")
 
+provisioner "remote-exec" {
+  inline = [
+    "export ENV=dev"
+    "mkdir newdir"
+  ]
+}
  tags = {
   Name = "${var.env_prefix}-myapp-server"
  }
